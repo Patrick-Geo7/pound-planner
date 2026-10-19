@@ -1,0 +1,652 @@
+<title>Pound Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=Instrument+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout concept: sticky control rail on the left (scenario, sliders), live results on the right.
+   The one bold element is the "cushion bar": your balance as a bar, a red wall at the funds floor that slides right as the pound weakens, eating the cushion.
+   Everything else stays quiet. Palette: pond-green ink, teal for your money, maple red for the CAD floor, amber for thin margins. */
+:root{
+  --bg:#EAF0EE; --surface:#FFFFFF; --surface-2:#DDE7E4; --fg:#0E2A2A; --muted:#47625F; --line:#C3D2CE;
+  --accent:#0B7A75; --accent-ink:#FFFFFF; --accent-soft:#CFEAE6;
+  --safe:#0B7A4B; --safe-bg:#D7F0E3; --warn:#8A5A00; --warn-bg:#FBEACB; --bad:#B3261E; --bad-bg:#F9DAD6;
+  --floor:#C23B2E; --ghost:#8DA19D;
+  --display:"Familjen Grotesk","Segoe UI",system-ui,sans-serif;
+  --body:"Instrument Sans","Segoe UI",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0B1B1B; --surface:#122828; --surface-2:#1A3534; --fg:#E4F0EE; --muted:#9BB5B1; --line:#2A4745;
+  --accent:#4FC8BF; --accent-ink:#06201F; --accent-soft:#17403E;
+  --safe:#55D69B; --safe-bg:#123B2A; --warn:#F1B955; --warn-bg:#3F2F0E; --bad:#FF8F86; --bad-bg:#4A1F1D;
+  --floor:#FF7A6C; --ghost:#6F8C88; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0B1B1B; --surface:#122828; --surface-2:#1A3534; --fg:#E4F0EE; --muted:#9BB5B1; --line:#2A4745;
+  --accent:#4FC8BF; --accent-ink:#06201F; --accent-soft:#17403E;
+  --safe:#55D69B; --safe-bg:#123B2A; --warn:#F1B955; --warn-bg:#3F2F0E; --bad:#FF8F86; --bad-bg:#4A1F1D;
+  --floor:#FF7A6C; --ghost:#6F8C88; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:16px/1.55 var(--body);padding-inline:16px;padding-block:20px 56px;-webkit-text-size-adjust:100%}
+.wrap{max-width:1180px;margin-inline:auto;display:grid;gap:24px}
+h1,h2,h3{font-family:var(--display);margin:0;line-height:1.1;text-wrap:balance;letter-spacing:-.01em}
+h1{font-size:clamp(2rem,6vw,3.2rem);font-weight:700}
+h2{font-size:1.35rem;font-weight:700}
+h3{font-size:1.02rem;font-weight:600}
+p{margin:0}
+.muted{color:var(--muted)}.small{font-size:.875rem}
+.num{font-variant-numeric:tabular-nums}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:6px}
+a{color:var(--accent)}
+header.top{display:grid;gap:14px}
+header.top p.lead{max-width:62ch;color:var(--muted);font-size:1.05rem}
+.how{display:flex;flex-wrap:wrap;gap:10px;list-style:none;margin:0;padding:0}
+.how li{display:flex;gap:10px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:8px 14px;font-size:.92rem}
+.how b{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-size:.8rem}
+.grid{display:grid;gap:24px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:960px){.grid{grid-template-columns:340px minmax(0,1fr);align-items:start}.rail{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow:auto}}
+.rail,.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;display:grid;gap:18px;min-width:0}
+.main{display:grid;gap:20px;min-width:0}
+.panel{align-content:start}
+.sec-t{display:grid;gap:4px}
+.sec-t p{color:var(--muted);font-size:.92rem;max-width:62ch}
+.presets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.preset{font:500 .88rem var(--body);text-align:left;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:8px 10px;cursor:pointer;display:grid;gap:2px;transition:border-color .2s,background .2s}
+.preset b{font-family:var(--display);font-size:1.05rem}
+.preset span{font-size:.78rem;color:var(--muted)}
+.preset[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.preset:hover{border-color:var(--accent)}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+button.act{font:600 .92rem var(--body);padding:9px 16px;border-radius:10px;border:0;background:var(--accent);color:var(--accent-ink);cursor:pointer}
+button.ghost{font:500 .88rem var(--body);padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--fg);cursor:pointer}
+.caption{font-size:.85rem;color:var(--muted);min-height:2.6em}
+.sl{display:grid;gap:4px}
+.sl-h{display:flex;justify-content:space-between;gap:8px;align-items:baseline;font-size:.88rem}
+.sl-h label{font-weight:600}
+.sl-h output{font-weight:600;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent);height:28px;margin:0}
+input[type=number]{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px;width:100%}
+.check{display:flex;gap:10px;align-items:center;font-size:.9rem;cursor:pointer}
+.check input{width:20px;height:20px;accent-color:var(--accent)}
+.rate-card{background:var(--bg);border-radius:12px;padding:12px 14px;display:grid;gap:2px}
+.rate-card .big{font:700 2rem var(--display);font-variant-numeric:tabular-nums}
+
+/* verdict */
+.verdict{display:grid;gap:14px}
+.v-top{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr))}
+.stat{background:var(--bg);border-radius:12px;padding:12px 14px;display:grid;gap:2px}
+.stat .k{font-size:.82rem;color:var(--muted)}
+.stat .v{font:700 1.6rem var(--display);font-variant-numeric:tabular-nums}
+.stat .u{font-size:.8rem;color:var(--muted)}
+.pill{display:inline-block;font-weight:600;font-size:.9rem;padding:4px 14px;border-radius:999px;justify-self:start}
+.pill.safe{background:var(--safe-bg);color:var(--safe)}
+.pill.thin{background:var(--warn-bg);color:var(--warn)}
+.pill.short{background:var(--bad-bg);color:var(--bad)}
+.vtext{font-size:1.02rem;max-width:64ch}
+.cush{display:grid;gap:14px}
+.cb{display:grid;gap:6px}
+.cb-h{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:.88rem}
+.cb-h b{font-weight:600}
+.track{position:relative;height:46px;border-radius:10px;background:var(--surface-2);overflow:hidden}
+.t-fill{position:absolute;left:0;top:0;bottom:0;background:var(--accent);border-radius:10px 0 0 10px}
+.t-lock{position:absolute;left:0;top:0;bottom:0;background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--floor) 70%,transparent) 0 6px,color-mix(in srgb,var(--floor) 30%,transparent) 6px 12px)}
+.t-wall{position:absolute;top:-2px;bottom:-2px;width:4px;background:var(--floor);border-radius:2px;transform:translateX(-2px)}
+.t-lbl{position:absolute;top:50%;transform:translateY(-50%);font-weight:600;font-size:.85rem;color:var(--accent-ink);padding-inline:10px;white-space:nowrap}
+.cb-legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.82rem;color:var(--muted)}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+
+/* charts */
+svg{display:block;width:100%;height:auto;overflow:visible}
+svg text{font-family:var(--body);font-size:12px}
+.tscroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.78rem;color:var(--muted);font-weight:600}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.tag{font-size:.74rem;font-weight:600;padding:2px 8px;border-radius:6px;background:var(--surface-2);color:var(--muted);white-space:nowrap}
+.tag.cad{background:var(--bad-bg);color:var(--bad)}
+.tag.usd{background:var(--warn-bg);color:var(--warn)}
+.up{color:var(--bad);font-weight:600}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;list-style:none;margin:0;padding:0;font-size:.85rem}
+.legend li{display:flex;gap:8px;align-items:center}
+.legend b{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--fg);color:var(--bg);font-size:.72rem}
+.stack{display:grid;gap:14px}
+.callout{background:var(--accent-soft);border-radius:12px;padding:12px 14px;font-size:.92rem}
+.mini{display:none}
+@media (max-width:959px){.mini{display:flex;position:sticky;bottom:env(safe-area-inset-bottom,0px);z-index:10;justify-content:space-between;gap:10px;align-items:center;padding:10px 14px;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:0 4px 18px rgba(0,0,0,.2);font-size:.88rem}.mini b{font:700 1.1rem var(--display)}}
+footer{display:grid;gap:10px;color:var(--muted);font-size:.88rem;max-width:80ch}
+footer ul{margin:0;padding-left:1.2rem;display:grid;gap:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* live rate strip */
+.live{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;display:grid;gap:12px;min-width:0}
+.live-h{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between}
+.live-main{display:flex;gap:14px;align-items:center;min-width:0}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--ghost);flex:none}
+.dot.ok{background:var(--safe)}.dot.stale{background:var(--warn)}.dot.err{background:var(--bad)}.dot.busy{background:var(--accent)}
+.dot.pulse{animation:ping 1.2s ease-out 1}
+@keyframes ping{0%{box-shadow:0 0 0 0 var(--safe)}100%{box-shadow:0 0 0 14px transparent}}
+@media (prefers-reduced-motion:reduce){.dot.pulse{animation:none}}
+.live-num{font:700 1.7rem/1 var(--display)}
+.live-ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.live select,.live input[type=text],.live input[type=password]{font:inherit;font-size:.9rem;padding:7px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);min-width:0;max-width:100%}
+.live details{border-top:1px solid var(--line);padding-top:10px}
+.live summary{cursor:pointer;font-weight:600;font-size:.92rem}
+.live .fields{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));margin-top:10px}
+.live .fields label{display:grid;gap:4px;font-size:.85rem;color:var(--muted);min-width:0}
+.live .note{margin-top:10px;max-width:70ch}
+#l-msg:empty{display:none}
+</style>
+
+<div class="wrap">
+<header class="top">
+  <h1>Pound Planner</h1>
+  <p class="lead">Your Express Entry money sits in Egyptian pounds, but the funds rule and the biggest fees are in Canadian dollars. Pick a forecast, drag the sliders, and watch what a weaker pound does to your cushion.</p>
+  <ol class="how">
+    <li><b>1</b>Pick a scenario on the left</li>
+    <li><b>2</b>Watch the red wall move on the cushion bar</li>
+    <li><b>3</b>Adjust your savings, then check the hedge</li>
+  </ol>
+</header>
+
+<section class="live" aria-label="Live exchange rate">
+  <div class="live-h">
+    <div class="live-main">
+      <span class="dot" id="l-dot" aria-hidden="true"></span>
+      <div><div class="small muted" id="l-label">Exchange rate</div><div><span class="live-num num" id="l-num">37.3</span> <span class="muted">pounds per Canadian dollar</span></div></div>
+    </div>
+    <div class="live-ctl">
+      <label class="small muted" for="l-every">Check every</label>
+      <select id="l-every"><option value="0">Never (manual)</option><option value="900000">15 minutes</option><option value="3600000">1 hour</option><option value="21600000">6 hours</option></select>
+      <button class="ghost" id="l-now" type="button">Refresh now</button>
+    </div>
+  </div>
+  <p class="small muted" id="l-sub"></p>
+  <p class="callout" id="l-impact"></p>
+  <p class="small" id="l-msg" role="status" aria-live="polite"></p>
+  <details>
+    <summary>Data source</summary>
+    <div class="fields">
+      <label>Where the rate comes from
+        <select id="l-prov">
+          <option value="auto">Automatic (free sources, in order)</option>
+          <option value="erapi">ExchangeRate-API, open access</option>
+          <option value="fawaz">Currency-API on jsDelivr</option>
+          <option value="bloomberg">Bloomberg, through my own licensed gateway</option>
+        </select>
+      </label>
+    </div>
+    <div class="fields" id="l-bbg" hidden>
+      <label>Gateway URL for USD/EGP (pounds per US dollar)<input type="text" id="b-usd" placeholder="https://your-gateway.example/fx/USDEGP" autocomplete="off"></label>
+      <label>Where the number sits in the reply<input type="text" id="b-usdp" placeholder="data.last" autocomplete="off"></label>
+      <label>Gateway URL for CAD/USD (US dollars per Canadian dollar)<input type="text" id="b-cad" placeholder="https://your-gateway.example/fx/CADUSD" autocomplete="off"></label>
+      <label>Where the number sits in the reply<input type="text" id="b-cadp" placeholder="data.last" autocomplete="off"></label>
+      <label>Access token, if your gateway needs one<input type="password" id="b-tok" autocomplete="off"></label>
+      <div class="row" style="align-self:end"><button class="act" id="b-save" type="button">Save and use</button></div>
+    </div>
+    <p class="small muted note">Bloomberg has no open web API. Its data interfaces (BLPAPI, B-PIPE, Data License) need a signed agreement and are not meant to be called from a web page. If your firm runs a gateway that returns JSON for USDEGP Curncy and CADUSD Curncy, paste its addresses here. They and the token stay in this browser only. Free sources update about once a day and are mid-market rates, so your bank's buy rate will differ by a few percent.</p>
+    <p class="small muted note">Rates by <a href="https://www.exchangerate-api.com">Exchange Rate API</a> and <a href="https://github.com/fawazahmed0/exchange-api">fawazahmed0/exchange-api</a>.</p>
+  </details>
+</section>
+
+<div class="grid">
+  <aside class="rail" aria-label="Controls">
+    <div class="sec-t"><h2>1. Pick a scenario</h2><p>Each card is a published forecast or a stress test. The number is how many pounds one Canadian dollar costs.</p></div>
+    <div class="presets" id="presets"></div>
+    <div class="row"><button class="act" id="play" type="button">Play all forecasts</button><span class="small muted" id="play-note"></span></div>
+    <p class="caption" id="caption" aria-live="polite"></p>
+
+    <div class="rate-card"><span class="small muted">Pounds per Canadian dollar</span><span class="big" id="rate-big">0</span><span class="small muted" id="rate-vs"></span></div>
+    <div class="sl"><div class="sl-h"><label for="usd">Pounds per US dollar</label><output id="usd-o"></output></div><input type="range" id="usd" min="44" max="80" step="0.1"></div>
+    <div class="sl"><div class="sl-h"><label for="cu">US dollars per Canadian dollar</label><output id="cu-o"></output></div><input type="range" id="cu" min="0.66" max="0.80" step="0.001"></div>
+
+    <div class="sec-t"><h2>2. Your money</h2></div>
+    <div class="sl"><div class="sl-h"><label for="start">Savings today (EGP)</label><output id="start-o"></output></div><input type="range" id="start" min="400000" max="1500000" step="10000"></div>
+    <div class="sl"><div class="sl-h"><label for="save">You add each month (EGP)</label><output id="save-o"></output></div><input type="range" id="save" min="0" max="30000" step="1000"></div>
+    <div class="sl"><div class="sl-h"><label for="int">Interest each month (EGP)</label><output id="int-o"></output></div><input type="range" id="int" min="0" max="15000" step="500"></div>
+    <div class="sl"><div class="sl-h"><label for="inflow">One-off money on Oct 7, 2027 (EGP)</label><output id="inflow-o"></output></div><input type="range" id="inflow" min="0" max="500000" step="10000"></div>
+    <div class="sl"><div class="sl-h"><label for="delay">Delay before you apply</label><output id="delay-o"></output></div><input type="range" id="delay" min="0" max="6" step="1"></div>
+    <label class="check"><input type="checkbox" id="retake"> I retake IELTS once</label>
+  </aside>
+
+  <main class="main">
+    <section class="panel verdict" aria-labelledby="h-v">
+      <div class="sec-t"><h2 id="h-v">What this does to your cushion</h2><p>The cushion is what is left above the CAD 15,263 you must keep in the account when you apply and when you land.</p></div>
+      <div class="v-top">
+        <div class="stat"><span class="k">Cushion when you apply</span><span class="v" id="m-sub">0</span><span class="u" id="m-sub-u"></span></div>
+        <div class="stat"><span class="k">Cushion when you land</span><span class="v" id="m-land">0</span><span class="u" id="m-land-u"></span></div>
+        <div class="stat"><span class="k">Funds floor</span><span class="v" id="m-floor">0</span><span class="u">EGP for CAD 15,263</span></div>
+      </div>
+      <div id="verdict" aria-live="polite" class="stack"><span class="pill" id="v-pill"></span><p class="vtext" id="v-text"></p></div>
+      <div class="cush">
+        <div class="cb"><div class="cb-h"><b>When you apply</b><span class="muted" id="cb1-t"></span></div><div class="track" id="tr1"><div class="t-fill"></div><div class="t-lock"></div><div class="t-wall"></div><span class="t-lbl"></span></div></div>
+        <div class="cb"><div class="cb-h"><b>When you land</b><span class="muted" id="cb2-t"></span></div><div class="track" id="tr2"><div class="t-fill"></div><div class="t-lock"></div><div class="t-wall"></div><span class="t-lbl"></span></div></div>
+        <div class="cb-legend"><span><i class="sw" style="background:var(--accent)"></i>Your balance</span><span><i class="sw" style="background:repeating-linear-gradient(135deg,var(--floor) 0 3px,transparent 3px 6px)"></i>Money you must keep</span><span><i class="sw" style="background:var(--floor)"></i>Funds floor (moves with the rate)</span></div>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-c">
+      <div class="sec-t"><h2 id="h-c">Your balance month by month</h2><p>The blue line is your account. The red line is the floor in pounds: it climbs when the pound weakens. Where blue is above red you are safe.</p></div>
+      <label class="check"><input type="checkbox" id="nosave"> Also show what happens if I stop saving and earn no interest</label>
+      <svg id="chart" viewBox="0 0 760 340" role="img" aria-label="Balance against funds floor"></svg>
+    </section>
+
+    <section class="panel" aria-labelledby="h-r">
+      <div class="sec-t"><h2 id="h-r">How far can the pound fall?</h2><p>Green is safe, amber is thin, red is short, for your current savings settings. The needle is your chosen rate. The numbered dots are the forecasts: click one to jump to it.</p></div>
+      <svg id="ruler" viewBox="0 0 760 120" role="img" aria-label="Safe range of pound rates"></svg>
+      <ul class="legend" id="ruler-legend"></ul>
+      <p class="callout" id="ruler-note"></p>
+    </section>
+
+    <section class="panel" aria-labelledby="h-k">
+      <div class="sec-t"><h2 id="h-k">What each cost becomes</h2><p>Red-tagged items are priced in Canadian dollars, so they rise one for one with the rate. Yellow is priced in US dollars. The rest are local and rise by half of any fall beyond 37.3, the rate on October 14 when these prices were checked (the IELTS fee is already known: EGP 10,200).</p></div>
+      <div class="tscroll"><table><thead><tr><th>When</th><th>Cost</th><th>Priced in</th><th class="n">EGP</th><th class="n">CAD</th><th class="n">More than today</th></tr></thead><tbody id="costs"></tbody></table></div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-h">
+      <div class="sec-t"><h2 id="h-h">Should I buy Canadian dollars now?</h2><p>Buying CAD today fixes the cost, but the pounds you spend stop earning interest. Move the slider to see where buying early starts to pay.</p></div>
+      <div class="sl"><div class="sl-h"><label for="hamt">Canadian dollars to buy today</label><output id="hamt-o"></output></div><input type="range" id="hamt" min="0" max="20000" step="25"></div>
+      <div class="v-top">
+        <div class="stat"><span class="k">You pay today</span><span class="v" id="h-now">0</span><span class="u">EGP at today's rate</span></div>
+        <div class="stat"><span class="k">Interest you give up</span><span class="v" id="h-int">0</span><span class="u" id="h-int-u"></span></div>
+        <div class="stat"><span class="k">Result at your scenario</span><span class="v" id="h-net">0</span><span class="u" id="h-net-u"></span></div>
+      </div>
+      <svg id="hedge" viewBox="0 0 760 280" role="img" aria-label="Gain or loss from buying early at each rate"></svg>
+      <p class="callout" id="h-note"></p>
+    </section>
+    <div class="mini" aria-hidden="true"><span>Rate <b id="mn-r">0</b></span><span>Cushion at apply <b id="mn-c">0</b></span><span id="mn-p"></span></div>
+  </main>
+</div>
+
+<footer>
+  <p>Planning model only, not financial advice. Checked against official pages: IRCC fees (CAD 990, 600 and 85, modified September 21, 2026), the CAD 15,263 funds floor (IRCC table of July 7, 2025) and the IELTS fee (EGP 10,200 on computer, British Council Egypt). Not verified, from private blogs: medical (EGP 6,000), police (500), translations (about 6,000), photos (500). My estimates: the 3% card margin, a USD 660 flight with baggage, courier, books and letters. The EGP 180,000 is counted in October 2027, after the application, so it helps at landing only. Interest is a flat monthly amount, not tied to the balance. Application is assumed in month 7 and landing in month 15 from October 2026, plus any delay you set. One rate is applied to every payment.</p>
+  <p>Forecast sources:</p>
+  <ul>
+    <li><a href="https://tradingeconomics.com/egypt/currency/forecast">Trading Economics</a>: 53.11 per USD on October 14, 2026; 51.0 in 12 months.</li>
+    <li><a href="https://www.egypttoday.com/Article/3/148418/Egyptian-pound-strengthening-to-LE-49-per-dollar-by-June">Reuters poll via Egypt Today</a>: 49 per USD by June 2027 (July 19, 2026).</li>
+    <li><a href="https://www.xs.com/en/blog/usd-egp-forecast/">XS forecast roundup</a>: IMF 55.31 for 2027 (March 10, 2026).</li>
+    <li><a href="https://www.interchangefinancial.com/blog/usd-cad-forecast-canadian-dollar-stuck-at-1-3700-whats-next-for-cad-in-2026/">Interchange Financial</a>: banks expect CAD near 0.75 USD by end 2026 (February 24, 2026); <a href="https://www.exchange-rates.org/exchange-rate-history/cad-usd-2026-10-02">0.702 on October 2</a>.</li>
+  </ul>
+  <p>Two forecast sources are seven to eight months old and have already missed; the step devaluation is a stress test, not a forecast.</p>
+</footer>
+</div>
+
+<script>
+(function(){
+var $=function(s){return document.querySelector(s)};
+var reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+var FLOOR=15263, SAFE=100000;
+/* BASE = the rate when the local prices were checked (Oct 14); never moves. TODAY = the latest rate, moves with the live feed. */
+var BASE_USD=53.11, BASE_CU=0.702, BASE=BASE_USD*BASE_CU, TODAY_USD=BASE_USD, TODAY_CU=BASE_CU, TODAY=BASE;
+var FC=[
+ {id:'poll',n:1,name:'Analyst poll',usd:49,cu:.702,live:'cu',src:'Reuters poll of analysts, July 19, 2026: 49 pounds per US dollar by June 2027.'},
+ {id:'te',n:2,name:'Trading Economics',usd:51,cu:.702,live:'cu',src:'Trading Economics, October 14, 2026: 51.0 per US dollar in 12 months.'},
+ {id:'today',n:3,name:'Today',usd:53.11,cu:.702,src:'Trading Economics October 14 (53.11 per US dollar) and 0.702 US dollars per Canadian dollar (October 2).'},
+ {id:'imf',n:4,name:'IMF 2027',usd:55.31,cu:.702,live:'cu',src:'IMF as quoted by XS, March 10, 2026: 55.31 per US dollar for 2027.'},
+ {id:'plan',n:5,name:'My plan (40)',usd:56.98,cu:.702,src:'The planning rate used in your financial plan: 40 pounds per Canadian dollar.'},
+ {id:'imfcad',n:6,name:'IMF + stronger CAD',usd:55.31,cu:.745,src:'IMF 2027 forecast with the Canadian dollar at 0.745 US dollars, near the 0.75 banks expect.'},
+ {id:'step',n:7,name:'Step devaluation',usd:71.2,cu:.702,live:'cu',src:'A one-off jump of about a third in the cost of foreign money. A stress test, not a forecast.'}
+];
+function fcRate(f){return f.usd*f.cu}
+/* targets and view (tweened) */
+var T={usd:BASE_USD,cu:BASE_CU,start:840000,save:10000,int:10000,delay:0,hamt:1675,inflow:180000};
+var V=JSON.parse(JSON.stringify(T));
+var opt={retake:false,nosave:false}, activeId='today';
+var fmt=function(v){return Math.round(v).toLocaleString('en-US')};
+var sgn=function(v){return (v>=0?'+':'−')+fmt(Math.abs(v))};
+
+/* model */
+function sim(r,p,over){
+  over=over||{};
+  var save=over.save!==undefined?over.save:p.save, inter=over.int!==undefined?over.int:p.int;
+  var d=Math.round(p.delay), si=6+d, li=14+d, N=li+2;
+  var pt=1+0.5*Math.max(0,r/BASE-1), usd=r/p.cu;
+  var costs=[]; // {i,label,egp,kind}
+  function add(i,label,egp,kind,when){costs.push({i:i,label:label,egp:egp,kind:kind,when:when})}
+  add(0,'IELTS books or course',3000,'egp','Oct 2026');
+  add(1,'IELTS fee (price confirmed)',10200,'egp','Nov 2026');
+  add(3,'Employer letter and job documents',500,'egp','Jan 2027');
+  if(opt.retake)add(3,'IELTS retake',10200,'egp','Jan 2027');
+  add(si-1,'Medical exam',6000*pt,'egp','before applying');
+  add(si-1,'Police certificate',500*pt,'egp','before applying');
+  add(si-1,'Certified translations',6000*pt,'egp','before applying');
+  add(si-1,'Immigration photos',500*pt,'egp','before applying');
+  add(si-1,'Courier and copies',2000,'egp','before applying');
+  add(si,'IRCC processing fee (CAD 990)',990*r,'cad','applying');
+  add(si,'Right of PR fee (CAD 600)',600*r,'cad','applying');
+  add(si,'Biometrics (CAD 85)',85*r,'cad','applying');
+  add(si,'Card and currency margin (3%)',0.03*1675*r,'cad','applying');
+  add(si,'Bank letter',500,'egp','applying');
+  add(li,'One-way flight (USD 600)',600*usd,'usd','landing');
+  add(li,'Extra baggage (USD 60)',60*usd,'usd','landing');
+  var bal=[],b=p.start;
+  for(var i=0;i<N;i++){
+    if(i>=1)b+=save+inter;
+    if(i===12)b+=(p.inflow||0);
+    for(var k=0;k<costs.length;k++)if(costs[k].i===i)b-=costs[k].egp;
+    bal.push(b);
+  }
+  var floor=FLOOR*r;
+  return {bal:bal,si:si,li:li,N:N,floor:floor,msub:bal[si]-floor,mland:bal[li]-floor,costs:costs};
+}
+function worst(r,p,over){var s=sim(r,p,over);return Math.min(s.msub,s.mland)}
+function solve(p,target){ // rate where worst margin == target (worst falls as r rises)
+  var lo=20,hi=140,i;
+  if(worst(lo,p)<target)return lo; if(worst(hi,p)>target)return hi;
+  for(i=0;i<40;i++){var mid=(lo+hi)/2; if(worst(mid,p)>target)lo=mid;else hi=mid}
+  return (lo+hi)/2;
+}
+
+/* UI build */
+var presetsEl=$('#presets'), liveOn=false;
+function buildPresets(){
+  presetsEl.innerHTML='';
+  FC.forEach(function(f){
+    var b=document.createElement('button');b.type='button';b.className='preset';b.dataset.id=f.id;
+    b.innerHTML='<b>'+fcRate(f).toFixed(1)+'</b><span>'+f.name+(f.id==='today'&&liveOn?' (live)':'')+'</span>';
+    b.addEventListener('click',function(){stopPlay();choose(f.id)});
+    presetsEl.appendChild(b);
+  });
+}
+buildPresets();
+function choose(id){
+  var f=FC.filter(function(x){return x.id===id})[0]; if(!f)return;
+  activeId=id;T.usd=f.usd;T.cu=f.cu;
+  $('#caption').textContent=f.src;
+  syncInputs();kick();
+}
+function matchActive(){
+  var r=T.usd*T.cu,found=null;
+  FC.forEach(function(f){if(Math.abs(f.usd-T.usd)<0.05&&Math.abs(f.cu-T.cu)<0.0006)found=f.id});
+  activeId=found;
+  document.querySelectorAll('.preset').forEach(function(b){b.setAttribute('aria-pressed',b.dataset.id===found?'true':'false')});
+  if(!found)$('#caption').textContent='Custom rate from your sliders.';
+}
+function syncInputs(){
+  $('#usd').value=T.usd;$('#cu').value=T.cu;$('#start').value=T.start;$('#save').value=T.save;$('#int').value=T.int;$('#delay').value=T.delay;$('#hamt').value=T.hamt;$('#inflow').value=T.inflow;$('#inflow-o').textContent=fmt(T.inflow);
+  $('#usd-o').textContent=T.usd.toFixed(1);$('#cu-o').textContent=T.cu.toFixed(3);
+  $('#start-o').textContent=fmt(T.start);$('#save-o').textContent=fmt(T.save);$('#int-o').textContent=fmt(T.int);
+  $('#delay-o').textContent=T.delay===0?'none':T.delay+' month'+(T.delay>1?'s':'');
+  $('#hamt-o').textContent='CAD '+fmt(T.hamt);
+  matchActive();
+}
+[['usd','usd',parseFloat],['cu','cu',parseFloat],['start','start',parseFloat],['save','save',parseFloat],['int','int',parseFloat],['delay','delay',parseFloat],['hamt','hamt',parseFloat],['inflow','inflow',parseFloat]].forEach(function(a){
+  $('#'+a[0]).addEventListener('input',function(){stopPlay();T[a[1]]=a[2](this.value);syncInputs();kick()});
+});
+$('#retake').addEventListener('change',function(){opt.retake=this.checked;render()});
+$('#nosave').addEventListener('change',function(){opt.nosave=this.checked;render()});
+
+/* play */
+var timer=null,pi=0;
+function stopPlay(){if(timer){clearInterval(timer);timer=null;$('#play').textContent='Play all forecasts';$('#play-note').textContent=''}}
+$('#play').addEventListener('click',function(){
+  if(timer){stopPlay();return}
+  pi=0;$('#play').textContent='Stop';
+  var step=function(){var f=FC[pi%FC.length];choose(f.id);$('#play-note').textContent=(pi%FC.length+1)+' of '+FC.length;pi++;if(reduce&&pi>FC.length*2)stopPlay()};
+  step();timer=setInterval(step,2600);
+});
+
+/* tween loop */
+var raf=null;
+function kick(){
+  if(reduce){for(var k in T)V[k]=T[k];render();return}
+  if(raf)return;
+  (function loop(){
+    var moving=false;
+    for(var k in T){var d=T[k]-V[k];if(Math.abs(d)>1e-4*Math.max(1,Math.abs(T[k]))){V[k]+=d*0.16;moving=true}else V[k]=T[k]}
+    render();
+    raf=moving?requestAnimationFrame(loop):null;
+  })();
+}
+
+/* render pieces */
+var SVGNS='http://www.w3.org/2000/svg';
+function el(n,a,t){var e=document.createElementNS(SVGNS,n);for(var k in a)e.setAttribute(k,a[k]);if(t!==undefined)e.textContent=t;return e}
+var CMAX=1300000;
+function setBar(id,bal,floor){
+  var tr=$(id),fill=tr.querySelector('.t-fill'),lock=tr.querySelector('.t-lock'),wall=tr.querySelector('.t-wall'),lb=tr.querySelector('.t-lbl');
+  var pct=function(v){return Math.max(0,Math.min(100,v/CMAX*100))};
+  fill.style.width=pct(bal)+'%'; lock.style.width=pct(floor)+'%'; wall.style.left=pct(floor)+'%';
+  var m=bal-floor, end=Math.max(pct(bal),pct(floor));
+  lb.style.left=Math.min(end+1.2,76)+'%';
+  lb.style.color=m>=0?'var(--safe)':'var(--bad)';
+  lb.textContent=m>=0?'cushion '+fmt(m):'short by '+fmt(-m);
+}
+function verdictOf(w){return w>=SAFE?'safe':(w>=0?'thin':'short')}
+var P=function(){return {usd:V.usd,cu:V.cu,start:V.start,save:V.save,int:V.int,delay:V.delay,inflow:V.inflow}};
+
+function render(){
+  var p=P(),r=V.usd*V.cu,s=sim(r,p),sToday=sim(TODAY,p);
+  var w=Math.min(s.msub,s.mland),vd=verdictOf(w);
+  $('#rate-big').textContent=r.toFixed(1);
+  var dpct=(r/TODAY-1)*100;
+  $('#rate-vs').textContent=Math.abs(dpct)<0.5?'About today\'s rate ('+TODAY.toFixed(1)+')':(dpct>0?'The pound is '+dpct.toFixed(0)+'% weaker than today ('+TODAY.toFixed(1)+')':'The pound is '+(-dpct).toFixed(0)+'% stronger than today ('+TODAY.toFixed(1)+')');
+  $('#m-sub').textContent=sgn(s.msub);$('#m-land').textContent=sgn(s.mland);$('#m-floor').textContent=fmt(s.floor);
+  $('#m-sub-u').textContent='EGP, balance '+fmt(s.bal[s.si]);$('#m-land-u').textContent='EGP, balance '+fmt(s.bal[s.li]);
+  $('#m-sub').style.color=s.msub<0?'var(--bad)':'';$('#m-land').style.color=s.mland<0?'var(--bad)':'';
+  var pill=$('#v-pill');pill.className='pill '+vd;
+  pill.textContent=vd==='safe'?'Safe':vd==='thin'?'Thin cushion':'Short of the floor';
+  var be=solve(p,0), be100=solve(p,SAFE);
+  var txt;
+  if(vd==='safe')txt='You stay above the funds floor with room to spare. The pound could weaken to about '+be.toFixed(0)+' per Canadian dollar before you were short.';
+  else if(vd==='thin')txt='You are above the floor, but under EGP 100,000 of cushion. A small further fall in the pound would put you below it.';
+  else txt='You would be short by EGP '+fmt(-w)+' at '+(s.msub<s.mland?'the time you apply':'landing')+'. Add savings, delay less, or move some money into Canadian dollars.';
+  $('#v-text').textContent=txt;
+  setBar('#tr1',s.bal[s.si],s.floor);setBar('#tr2',s.bal[s.li],s.floor);
+  $('#cb1-t').textContent='balance '+fmt(s.bal[s.si])+' against floor '+fmt(s.floor);
+  $('#cb2-t').textContent='balance '+fmt(s.bal[s.li])+' against floor '+fmt(s.floor);
+  $('#mn-r').textContent=r.toFixed(1);$('#mn-c').textContent=sgn(s.msub);
+  var mp=$('#mn-p');mp.className='pill '+vd;mp.textContent=vd==='safe'?'Safe':vd==='thin'?'Thin':'Short';
+  drawChart(s,sToday,r,p);
+  drawRuler(r,be,be100);
+  drawCosts(s,sToday);
+  drawHedge(r,p);
+  if(window.__liveImpact)window.__liveImpact(p);
+}
+
+function drawChart(s,st,r,p){
+  var svg=$('#chart');while(svg.firstChild)svg.removeChild(svg.firstChild);
+  var N=s.N,x0=64,x1=730,y0=290,top=60,ymin=400000,ymax=1300000;
+  var x=function(i){return x0+i*(x1-x0)/(N-1)},y=function(v){return y0-(Math.max(ymin,Math.min(ymax,v))-ymin)/(ymax-ymin)*(y0-top)};
+  [600000,800000,1000000,1200000].forEach(function(v){svg.appendChild(el('line',{x1:x0,x2:x1,y1:y(v),y2:y(v),stroke:'var(--line)'}));svg.appendChild(el('text',{x:x0-8,y:y(v)+4,'text-anchor':'end',fill:'var(--muted)'},(v/1000)+'k'))});
+  var names=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],yr=2026,mo=9;
+  for(var i=0;i<N;i++){var m=(mo+i)%12,yy=yr+Math.floor((mo+i)/12);if(i%3===0)svg.appendChild(el('text',{x:x(i),y:y0+22,'text-anchor':'middle',fill:'var(--muted)'},names[m]+' '+String(yy).slice(2)))}
+  // floor today (ghost) and floor at r
+  svg.appendChild(el('line',{x1:x0,x2:x1,y1:y(FLOOR*TODAY),y2:y(FLOOR*TODAY),stroke:'var(--ghost)','stroke-dasharray':'5 4','stroke-width':1.5}));
+  svg.appendChild(el('text',{x:x0+4,y:y(FLOOR*TODAY)-6,fill:'var(--muted)'},'Floor at today\'s '+TODAY.toFixed(1)+': '+fmt(FLOOR*TODAY)));
+  // gap fill at the two checkpoints
+  var line=function(arr,col,wd,dash){var d='';arr.forEach(function(v,i){d+=(i?'L':'M')+x(i)+','+y(v)});var pth=el('path',{d:d,fill:'none',stroke:col,'stroke-width':wd,'stroke-linejoin':'round'});if(dash)pth.setAttribute('stroke-dasharray',dash);svg.appendChild(pth)};
+  if(opt.nosave){var ns=sim(r,p,{save:0,int:0});line(ns.bal,'var(--ghost)',2);var nl=ns.bal[N-1];svg.appendChild(el('text',{x:x1,y:y(nl)+18,'text-anchor':'end',fill:'var(--muted)'},'If you stop saving: '+fmt(nl)))}
+  svg.appendChild(el('line',{x1:x0,x2:x1,y1:y(s.floor),y2:y(s.floor),stroke:'var(--floor)','stroke-width':2.5}));
+  var fy=y(s.floor),flab=el('text',{x:x1,y:(s.floor>1100000?fy+16:fy-8),'text-anchor':'end',fill:'var(--floor)','font-weight':600},'Floor at '+r.toFixed(1)+': '+fmt(s.floor));svg.appendChild(flab);
+  line(s.bal,'var(--accent)',3);
+  s.bal.forEach(function(v,i){var c=el('circle',{cx:x(i),cy:y(v),r:3,fill:'var(--accent)'});svg.appendChild(c)});
+  [[s.si,'Apply',s.msub],[s.li,'Land',s.mland]].forEach(function(e){
+    var i=e[0],good=e[2]>=0;
+    svg.appendChild(el('line',{x1:x(i),x2:x(i),y1:50,y2:y0,stroke:'var(--muted)','stroke-dasharray':'2 3'}));
+    svg.appendChild(el('text',{x:x(i),y:36,'text-anchor':'middle',fill:good?'var(--safe)':'var(--bad)','font-weight':600},e[1]+' '+sgn(e[2])));
+  });
+  svg.setAttribute('aria-label','Balance against funds floor at '+r.toFixed(1)+' pounds per Canadian dollar. Cushion when you apply '+sgn(s.msub)+', when you land '+sgn(s.mland));
+}
+
+function drawRuler(r,be,be100){
+  var svg=$('#ruler');while(svg.firstChild)svg.removeChild(svg.firstChild);
+  var a=32,b=56,x0=30,x1=730,x=function(v){return x0+(Math.max(a,Math.min(b,v))-a)/(b-a)*(x1-x0)};
+  var yb=50,h=30;
+  svg.appendChild(el('rect',{x:x0,y:yb,width:x(be100)-x0,height:h,fill:'var(--safe)',opacity:.85,rx:6}));
+  svg.appendChild(el('rect',{x:x(be100),y:yb,width:Math.max(0,x(be)-x(be100)),height:h,fill:'var(--warn)',opacity:.85}));
+  svg.appendChild(el('rect',{x:x(be),y:yb,width:Math.max(0,x1-x(be)),height:h,fill:'var(--floor)',opacity:.85,rx:6}));
+  for(var v=32;v<=56;v+=4){svg.appendChild(el('text',{x:x(v),y:yb+h+18,'text-anchor':'middle',fill:'var(--muted)'},String(v)));svg.appendChild(el('line',{x1:x(v),x2:x(v),y1:yb+h,y2:yb+h+4,stroke:'var(--muted)'}))}
+  svg.appendChild(el('text',{x:x0,y:yb+h+38,fill:'var(--muted)'},'Pounds per Canadian dollar'));
+  var sb=be>=b?'No fall in this range puts you short':'Short beyond '+be.toFixed(1);
+  FC.forEach(function(f){
+    var rr=fcRate(f),g=el('g',{style:'cursor:pointer',tabindex:'0',role:'button','aria-label':f.name+' '+rr.toFixed(1)});
+    g.appendChild(el('circle',{cx:x(rr),cy:yb+h/2,r:9,fill:'var(--fg)',stroke:'var(--surface)','stroke-width':2}));
+    g.appendChild(el('text',{x:x(rr),y:yb+h/2+4,'text-anchor':'middle',fill:'var(--bg)','font-weight':700,'font-size':'10'},String(f.n)));
+    var t=el('title',{},f.name+': '+rr.toFixed(1));g.appendChild(t);
+    g.addEventListener('click',function(){stopPlay();choose(f.id)});
+    g.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();stopPlay();choose(f.id)}});
+    svg.appendChild(g);
+  });
+  var nx=x(r);
+  svg.appendChild(el('line',{x1:nx,x2:nx,y1:30,y2:yb+h+4,stroke:'var(--fg)','stroke-width':3}));
+  svg.appendChild(el('text',{x:Math.max(40,Math.min(720,nx)),y:20,'text-anchor':'middle',fill:'var(--fg)','font-weight':700},'Now '+r.toFixed(1)));
+  $('#ruler-note').textContent=(be>=b?'With these savings no rate up to 56 puts you short.':'With these savings you are safe up to '+be100.toFixed(1)+' pounds per Canadian dollar, thin up to '+be.toFixed(1)+', and short beyond that.')+' Today is '+TODAY.toFixed(1)+', so '+(be>=b?'there is a lot of room.':'the pound would have to lose about '+Math.max(0,(be/TODAY-1)*100).toFixed(0)+'% against the Canadian dollar before you are short.');
+}
+var lg=$('#ruler-legend');FC.forEach(function(f){var li=document.createElement('li');li.innerHTML='<b>'+f.n+'</b><span>'+f.name+' '+fcRate(f).toFixed(1)+'</span>';lg.appendChild(li)});
+
+function drawCosts(s,st){
+  var tb=$('#costs');tb.innerHTML='';
+  var tot=0,tot0=0;
+  var rows=s.costs.map(function(c,i){return {c:c,t:st.costs[i]}});
+  rows.forEach(function(o){
+    var c=o.c,d=c.egp-o.t.egp;tot+=c.egp;tot0+=o.t.egp;
+    var tr=document.createElement('tr');
+    var tag=c.kind==='cad'?'<span class="tag cad">CAD</span>':c.kind==='usd'?'<span class="tag usd">USD</span>':'<span class="tag">EGP</span>';
+    tr.innerHTML='<td>'+c.when+'</td><td>'+c.label+'</td><td>'+tag+'</td><td class="n">'+fmt(c.egp)+'</td><td class="n">'+fmt(c.egp/(V.usd*V.cu))+'</td><td class="n '+(d>50?'up':'')+'">'+(Math.abs(d)<50?'–':sgn(d))+'</td>';
+    tb.appendChild(tr);
+  });
+  var tr=document.createElement('tr');tr.innerHTML='<td colspan="3"><b>Total</b></td><td class="n"><b>'+fmt(tot)+'</b></td><td class="n"><b>'+fmt(tot/(V.usd*V.cu))+'</b></td><td class="n '+(tot-tot0>50?'up':'')+'"><b>'+(Math.abs(tot-tot0)<50?'–':sgn(tot-tot0))+'</b></td>';
+  tb.appendChild(tr);
+}
+
+function drawHedge(r,p){
+  var amt=V.hamt,months=6+Math.round(V.delay),rateI=V.int/Math.max(1,V.start);
+  var now=amt*TODAY,lost=now*rateI*months,net=amt*(r-TODAY)-lost;
+  $('#h-now').textContent=fmt(now);$('#h-int').textContent=fmt(lost);$('#h-int-u').textContent='EGP over '+months+' months';
+  var nv=$('#h-net');nv.textContent=sgn(net);nv.style.color=net<0?'var(--bad)':'var(--safe)';
+  $('#h-net-u').textContent=net>=0?'EGP better off than waiting':'EGP worse off than waiting';
+  var be=amt>0?TODAY+lost/amt:TODAY;
+  $('#h-note').textContent=amt===0?'Move the slider to compare buying Canadian dollars now with paying later.':'Buying early pays only if the rate passes '+be.toFixed(1)+' by the time you pay. It protects you from a fall in the pound, and costs you the interest if the pound stays put or recovers.';
+  var svg=$('#hedge');while(svg.firstChild)svg.removeChild(svg.firstChild);
+  var a=32,b=56,x0=64,x1=730,y0=130,x=function(v){return x0+(v-a)/(b-a)*(x1-x0)};
+  var f=function(v){return amt*(v-TODAY)-lost};
+  var m=Math.max(1000,Math.abs(f(a)),Math.abs(f(b)),Math.abs(net)),yy=function(v){return y0-v/m*95};
+  svg.appendChild(el('rect',{x:x0,y:y0-95,width:x1-x0,height:95,fill:'var(--safe-bg)',opacity:.7}));
+  svg.appendChild(el('rect',{x:x0,y:y0,width:x1-x0,height:95,fill:'var(--bad-bg)',opacity:.7}));
+  svg.appendChild(el('line',{x1:x0,x2:x1,y1:y0,y2:y0,stroke:'var(--muted)'}));
+  svg.appendChild(el('text',{x:x0+6,y:y0-100+14,fill:'var(--safe)','font-weight':600},'Buying early wins'));
+  svg.appendChild(el('text',{x:x0+6,y:y0+95-6,fill:'var(--bad)','font-weight':600},'Waiting wins'));
+  for(var v=32;v<=56;v+=4)svg.appendChild(el('text',{x:x(v),y:y0+112,'text-anchor':'middle',fill:'var(--muted)'},String(v)));
+  svg.appendChild(el('text',{x:x1,y:y0+132,'text-anchor':'end',fill:'var(--muted)'},'Rate when you would have paid (pounds per Canadian dollar)'));
+  svg.appendChild(el('path',{d:'M'+x(a)+','+yy(f(a))+'L'+x(b)+','+yy(f(b)),stroke:'var(--accent)','stroke-width':3,fill:'none'}));
+  if(amt>0&&be>a&&be<b){svg.appendChild(el('circle',{cx:x(be),cy:y0,r:5,fill:'var(--fg)'}));svg.appendChild(el('text',{x:x(be),y:y0-10,'text-anchor':'middle',fill:'var(--fg)','font-weight':600},'Break-even '+be.toFixed(1)))}
+  var cx=x(Math.max(a,Math.min(b,r)));
+  svg.appendChild(el('circle',{cx:cx,cy:yy(Math.max(-m,Math.min(m,net))),r:7,fill:net>=0?'var(--safe)':'var(--bad)',stroke:'var(--surface)','stroke-width':2}));
+}
+
+
+/* ---------- live exchange rates ---------- */
+var LS_Q='poundPlanner.quote.v1', LS_C='poundPlanner.cfg.v1';
+var cfg={provider:'auto',every:3600000,usd:'',usdp:'',cad:'',cadp:'',tok:''};
+var quote=null, busy=false, tm=null, lastCheck=0;
+function lsGet(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+var saved=lsGet(LS_C); if(saved)for(var k in saved)if(k in cfg)cfg[k]=saved[k];
+
+function getJSON(url,headers){
+  var ctl=('AbortController' in window)?new AbortController():null, t=setTimeout(function(){if(ctl)ctl.abort()},10000);
+  return fetch(url,{headers:headers||{},cache:'no-store',signal:ctl?ctl.signal:undefined}).then(function(r){
+    clearTimeout(t); if(!r.ok)throw new Error('HTTP '+r.status); return r.json();
+  },function(e){clearTimeout(t);throw e});
+}
+function pick(o,path){return String(path||'').replace(/\[(\d+)\]/g,'.$1').split('.').filter(Boolean).reduce(function(a,k){return a==null?undefined:a[k]},o)}
+var PROV={
+  erapi:{name:'ExchangeRate-API',run:function(){
+    return getJSON('https://open.er-api.com/v6/latest/USD').then(function(j){
+      if(!j||j.result!=='success'||!j.rates)throw new Error('unexpected reply');
+      return {usd:+j.rates.EGP,cu:1/+j.rates.CAD,stamp:(j.time_last_update_unix||0)*1000,time:true};
+    });}},
+  fawaz:{name:'Currency-API (jsDelivr)',run:function(){
+    var done=function(j){if(!j||!j.usd)throw new Error('unexpected reply');return {usd:+j.usd.egp,cu:1/+j.usd.cad,stamp:Date.parse(j.date)||0,time:false}};
+    return getJSON('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json').then(done,function(){
+      return getJSON('https://latest.currency-api.pages.dev/v1/currencies/usd.json').then(done)});}},
+  bloomberg:{name:'Bloomberg gateway (yours)',run:function(){
+    if(!cfg.usd||!cfg.cad)return Promise.reject(new Error('gateway addresses not set'));
+    var h=cfg.tok?{Authorization:'Bearer '+cfg.tok}:{};
+    return Promise.all([getJSON(cfg.usd,h),getJSON(cfg.cad,h)]).then(function(a){
+      return {usd:+pick(a[0],cfg.usdp),cu:+pick(a[1],cfg.cadp),stamp:Date.now(),time:true};
+    });}}
+};
+function valid(q){if(!(q.usd>30&&q.usd<120&&q.cu>0.55&&q.cu<0.95))throw new Error('rate outside the expected range');return q}
+function tryNext(order,i,errs){
+  if(i>=order.length)return Promise.reject(errs);
+  var id=order[i];
+  return PROV[id].run().then(valid).then(function(q){q.id=id;q.src=PROV[id].name;return q}).catch(function(e){
+    errs.push(PROV[id].name+': '+(e&&e.message?e.message:e));return tryNext(order,i+1,errs)});
+}
+function orderFor(){return cfg.provider==='bloomberg'?['bloomberg','erapi','fawaz']:cfg.provider==='erapi'?['erapi']:cfg.provider==='fawaz'?['fawaz']:['erapi','fawaz']}
+
+var dEl=$('#l-dot');
+function fmtDate(q){
+  var d=new Date(q.stamp);if(!q.stamp||isNaN(d))return 'date not given';
+  return q.time?d.toLocaleString(undefined,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):d.toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'});
+}
+function renderLive(kind){
+  dEl.className='dot'+(kind?' '+kind:'');
+  $('#l-num').textContent=(quote?TODAY.toFixed(2):BASE.toFixed(1));
+  $('#l-label').textContent=quote?(quote.cached?'Last saved rate':'Live rate'):'Exchange rate (not live yet)';
+  var sub;
+  if(quote){
+    sub=quote.usd.toFixed(2)+' pounds per US dollar × '+quote.cu.toFixed(4)+' US dollars per Canadian dollar · '+quote.src+' · rates dated '+fmtDate(quote)+' · checked '+new Date(quote.checked).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
+    if(cfg.every>0&&!busy)sub+=' · next check about '+new Date((lastCheck||quote.checked)+cfg.every).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
+  }else sub='Using the October 14 rate ('+BASE_USD+' pounds per US dollar, '+BASE_CU+' US dollars per Canadian dollar) until a live rate loads.';
+  $('#l-sub').textContent=sub;
+}
+window.__liveImpact=function(p){
+  var el=$('#l-impact');
+  if(!quote){el.textContent='';el.hidden=true;return}
+  el.hidden=false;
+  var a=sim(BASE,p),b=sim(TODAY,p),d=(TODAY/BASE-1)*100;
+  el.textContent=(Math.abs(d)<0.05?'The rate is the same as on October 14 (37.3), so nothing has moved. ':'Since October 14 (37.3) the pound has become '+Math.abs(d).toFixed(1)+'% '+(d>0?'weaker':'stronger')+' against the Canadian dollar. ')+
+    'With your current settings your cushion when you apply goes from '+sgn(a.msub)+' to '+sgn(b.msub)+', and when you land from '+sgn(a.mland)+' to '+sgn(b.mland)+' EGP.';
+};
+function applyQuote(q){
+  var id=activeId;
+  quote=q;liveOn=true;
+  TODAY_USD=q.usd;TODAY_CU=q.cu;TODAY=q.usd*q.cu;
+  FC.forEach(function(f){
+    if(f.id==='today'){f.usd=q.usd;f.cu=q.cu;f.src='Latest rate from '+q.src+', dated '+fmtDate(q)+': '+q.usd.toFixed(2)+' pounds per US dollar and '+q.cu.toFixed(4)+' US dollars per Canadian dollar.'}
+    else if(f.id==='plan'){f.cu=q.cu;f.usd=40/q.cu}
+    else if(f.live==='cu')f.cu=q.cu;
+  });
+  $('#usd').min=Math.min(44,Math.floor(q.usd-2));$('#usd').max=Math.max(80,Math.ceil(q.usd+2));
+  $('#cu').min=Math.min(0.66,Math.floor((q.cu-0.02)*100)/100);$('#cu').max=Math.max(0.80,Math.ceil((q.cu+0.02)*100)/100);
+  buildPresets();
+  var f=FC.filter(function(x){return x.id===id})[0];
+  if(f){T.usd=f.usd;T.cu=f.cu;$('#caption').textContent=f.src}   /* on a preset: follow it; on a custom slider position: leave it */
+  syncInputs();kick();
+}
+function refresh(manual){
+  if(busy)return Promise.resolve();
+  busy=true;$('#l-now').disabled=true;renderLive('busy');$('#l-msg').textContent=manual?'Checking the rate...':'';
+  return tryNext(orderFor(),0,[]).then(function(q){
+    q.checked=Date.now();lastCheck=q.checked;q.cached=false;
+    lsSet(LS_Q,q);applyQuote(q);busy=false;
+    $('#l-msg').textContent=(cfg.provider==='bloomberg'&&q.id!=='bloomberg')?'Your Bloomberg gateway did not answer, so a free source was used.':'';
+    renderLive('ok');dEl.classList.remove('pulse');void dEl.offsetWidth;dEl.classList.add('pulse');
+  },function(errs){
+    busy=false;lastCheck=Date.now();
+    var blocked=(errs||[]).join(' ').toLowerCase().indexOf('failed to fetch')>-1||(errs||[]).join(' ').toLowerCase().indexOf('networkerror')>-1||(errs||[]).join(' ').toLowerCase().indexOf('load failed')>-1;
+    $('#l-msg').textContent='Could not get a new rate. '+(blocked?'This page may be running somewhere that blocks outside requests (some previews do), or you are offline. Open the downloaded file in your browser for live rates. ':'')+'Still using '+(quote?'the last saved rate.':'the October 14 rate.')+' ('+(errs||[]).join('; ')+')';
+    renderLive(quote?'stale':'err');
+  }).then(function(){$('#l-now').disabled=false;schedule();render()});
+}
+function schedule(){clearTimeout(tm);if(cfg.every>0)tm=setTimeout(function(){refresh(false)},cfg.every)}
+$('#l-now').addEventListener('click',function(){refresh(true)});
+$('#l-every').addEventListener('change',function(){cfg.every=+this.value;lsSet(LS_C,cfg);schedule();renderLive(dEl.className.replace('dot','').replace('pulse','').trim())});
+$('#l-prov').addEventListener('change',function(){cfg.provider=this.value;lsSet(LS_C,cfg);$('#l-bbg').hidden=cfg.provider!=='bloomberg';if(cfg.provider!=='bloomberg')refresh(true)});
+$('#b-save').addEventListener('click',function(){
+  cfg.usd=$('#b-usd').value.trim();cfg.usdp=$('#b-usdp').value.trim();cfg.cad=$('#b-cad').value.trim();cfg.cadp=$('#b-cadp').value.trim();cfg.tok=$('#b-tok').value;
+  lsSet(LS_C,cfg);refresh(true);
+});
+document.addEventListener('visibilitychange',function(){if(!document.hidden&&cfg.every>0&&lastCheck&&Date.now()-lastCheck>cfg.every)refresh(false)});
+$('#l-every').value=String(cfg.every);$('#l-prov').value=cfg.provider;$('#l-bbg').hidden=cfg.provider!=='bloomberg';
+$('#b-usd').value=cfg.usd;$('#b-usdp').value=cfg.usdp;$('#b-cad').value=cfg.cad;$('#b-cadp').value=cfg.cadp;$('#b-tok').value=cfg.tok;
+
+syncInputs();
+$('#caption').textContent=FC[2].src;
+var cq=lsGet(LS_Q);
+if(cq&&cq.usd>30&&cq.cu>0.55&&Date.now()-cq.checked<7*864e5){cq.cached=true;lastCheck=0;applyQuote(cq);renderLive('stale')}else renderLive('');
+render();
+refresh(false);
+})();
+</script>
